@@ -1,0 +1,120 @@
+[package]
+name = "share-ninja-core"
+version = "1.0.0"
+edition = "2024"
+description = "Share.Ninja Core Library - Rust library for secure file transfers with S3 storage, P2P connections, and encrypted storage"
+license = "Apache-2.0"
+include = [
+    "src/**/*",
+]
+
+[dependencies]
+# rustls (not native-tls) so no openssl-sys: the Android NDK build has no system
+# OpenSSL. reqwest's rustls provider is shared across the graph (ring is the
+# process-default crypto provider, installed at startup).
+# No TLS feature here: the crate's `rustls` feature is just `reqwest/rustls`,
+# which bakes aws-lc-rs in as a fallback provider — the reqwest line below
+# enables rustls without it instead (features unify on the one reqwest).
+share-ninja-api = { path = "../generated/share-ninja-api", default-features = false }
+
+# Async runtime
+tokio = { version = "1.49", features = ["full"] }
+tokio-util = { version = "0.7.18", features = ["codec"] }
+futures = "0.3.31"
+async-trait = "0.1.89"
+
+# HTTP/WebSocket
+# `rustls-no-provider`, not `rustls`: the latter compiles aws-lc-rs in as the
+# fallback CryptoProvider. Every shell installs `ring` as the process default
+# before the first client is built, so no fallback is needed — and `ring` is
+# then the only provider in the graph (no aws-lc-sys C build anywhere).
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls-no-provider"] }
+reqwest-middleware = "0.5"
+http = "1"
+# rustls instead of native-tls — see the share-ninja-api note (no openssl-sys).
+# webpki-roots (bundled Mozilla CA set) rather than native-roots: Android keeps
+# its trust store in the Java KeyStore, which rustls-native-certs can't read, so
+# native-roots would fail WS cert verification on-device. webpki-roots is
+# OS-independent and verifies the public backend cert on every platform.
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
+
+# WebRTC
+webrtc = "0.21"
+
+# Serialization
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0"
+protobuf = "3.7"
+
+# Generated proto types
+share-ninja-proto = { path = "../generated/proto" }
+
+# Crypto
+aes-gcm = "0.11.0"
+hkdf = "0.13.0"
+sha2 = "0.11.0"
+rand = "0.10.1"
+x25519-dalek = { version = "3", features = ["static_secrets"] }
+bip39 = "2"
+
+# Compression
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+async-compression = { version = "0.4", features = ["tokio", "deflate"] }
+
+# Utilities
+base64 = "0.23"
+bs58 = "0.5"
+uuid = { version = "1.19", features = ["v4"] }
+thiserror = "2.0.17"
+tracing = "0.1.44"
+tracing-subscriber = { workspace = true }
+url = "2.5"
+chrono = { version = "0.4.43", features = ["serde"] }
+bytes = "1.11"
+futures-util = "0.3.32"
+# Custom http_body::Body for presigned S3 PUT: an exact size_hint yields a real
+# Content-Length (S3 rejects Transfer-Encoding: chunked with 501) while the body
+# increments the in-flight-sent counter per frame for progress smoothing.
+http-body = "1.0"
+urlencoding = "2.1.3"
+# Direct libc use: macOS/iOS getattrlistbulk bulk dir enumeration (fs/walk.rs)
+# and unix statvfs for FsDest's up-front disk-space check (fs/dest.rs).
+libc = "0.2"
+
+# Android-only: a preconfigured rustls config (webpki roots + ring) for the
+# backend reqwest clients (see back::webpki_client_config). Other platforms use
+# reqwest's default platform/OS verifier; only Android needs this because its
+# verifier does online OCSP revocation and rejects modern Let's Encrypt certs
+# that omit an OCSP responder.
+[target.'cfg(target_os = "android")'.dependencies]
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+webpki-roots = "1"
+# Read picked `content://` files without copying — open an fd via the app's
+# ContentResolver over JNI (see fs/source.rs). The JavaVM + app Context are
+# published into `ndk_context` by the droid native crate at startup.
+jni = "0.22"
+ndk-context = "0.1"
+
+# Apple platforms: NSURL to resolve security-scoped bookmarks for sandboxed
+# file reads (see fs/source.rs).
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSData", "NSURL", "NSString", "NSError"] }
+
+# Windows: GetDiskFreeSpaceExW for FsDest's up-front disk-space check
+# (fs/dest.rs volume_free_capacity).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+# `back::test_support::MockBackend`: an in-process scripted backend for the
+# session/keepalive tests (docs/app/reconnect.md, Harness A).
+axum = { workspace = true }
+# The unit tests are a "shell" too: AuthManager::new builds a reqwest client
+# eagerly, and with `rustls-no-provider` that panics unless a process-default
+# CryptoProvider is installed first (same install the binaries do).
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+
+[features]
+default = []

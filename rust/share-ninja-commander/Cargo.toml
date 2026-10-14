@@ -1,0 +1,61 @@
+[package]
+name = "share-ninja-commander"
+description = "The commander: MC-like dual-pane TUI file manager over share-ninja-core (local filesystem ⇄ Share.Ninja shares) — the `sninja cmd` subcommand, as a library"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+share-ninja-core = { workspace = true }
+share-ninja-client = { workspace = true }
+
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# The state between runs (`state.rs`).
+toml = "1.1.2"
+chrono = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+parking_lot = "0.12"
+# Share master key for shares created from the Links panel.
+rand = "0.10.1"
+dirs = "7.0.0"
+# Terminal column widths for the viewer (wide CJK/emoji = 2, combining = 0);
+# the version ratatui already pulls in.
+unicode-width = "0.2"
+
+# Mini music player (Enter on an mp3/aac/m4a): pure-Rust decode, native audio
+# out, FFT for the spectrum bars. Only the needed symphonia formats.
+symphonia = { version = "0.6", default-features = false, features = ["mp3", "aac", "isomp4"] }
+cpal = "0.18"
+rustfft = "6"
+tui-textarea = { version = "0.7.0", features = ["search"] }
+# Archives browsed in place (Enter on a .tar / .zip / .iso): the tar header walk
+# over a `StorageReader` (no xattr/unpack machinery); raw deflate for zip
+# entries — the zip container itself is parsed in `archive::zip`.
+tar = { version = "0.4", default-features = false }
+flate2 = "1"
+
+# The editor's copy/cut/paste against the system clipboard (text only).
+arboard = { version = "3", default-features = false }
+
+[target.'cfg(unix)'.dependencies]
+# The subshell: the pty, its pipe, poll, SIGCONT/SIGHUP, waitpid — and the
+# ioctls nix has no wrapper for (TIOCSCTTY, TIOCSWINSZ).
+nix = { version = "0.31", features = ["fs", "poll", "process", "signal", "term"] }
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_WindowsProgramming"] }
+
+[dev-dependencies]
+# The ignored live tests install the rustls provider themselves (the `sninja`
+# binary does it for the TUI).
+rustls = { version = "0.23.41", default-features = false, features = ["ring", "std", "tls12", "logging"] }

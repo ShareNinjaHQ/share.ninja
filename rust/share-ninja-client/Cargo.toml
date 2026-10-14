@@ -1,0 +1,29 @@
+[package]
+name = "share-ninja-client"
+description = "Shared client plumbing for the headless Share.Ninja binary (`sninja`: CLI + commander): keychain-backed device secrets, backend session with vault unlock, OAuth loopback login, share access resolution"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+share-ninja-core = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde_json = { workspace = true }
+anyhow = "1"
+url = "2.5"
+# OS version for agent registration — same crate/call as the desktop shell's os_info.
+os_info = "3"
+# Device secrets in the OS keychain (macOS Keychain, Windows Credential Manager,
+# Linux Secret Service) — `keyring`'s default `v1` feature, as the desktop shell.
+keyring = "4"
+rand = "0.10.1"
+sha2 = "0.11"
+# Real device name for agent registration — same crate as the desktop shell's
+# os_info (hostname fallback; macOS prefers the Computer Name, below).
+hostname = "0.4"
+
+# SCDynamicStoreCopyComputerName for the user-facing macOS Computer Name —
+# same crate/call as the desktop shell's os_info.
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"

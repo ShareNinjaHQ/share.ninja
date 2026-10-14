@@ -1,0 +1,86 @@
+[workspace]
+members = [
+    "share-ninja-core",
+    "share-ninja-client",
+    "share-ninja-cli",
+    "share-ninja-commander",
+    "generated/proto",
+]
+# The vendored patch crate resolves via [patch.crates-io], not as a member.
+exclude = ["vendor/rtc-shared", "vendor/rtc", "vendor/rtc-sctp", "vendor/webrtc", "vendor/tui-textarea"]
+resolver = "2"
+
+[workspace.package]
+version = "1.0.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+# Shared
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+async-trait = "0.1"
+uuid = { version = "1.23.3", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Server
+axum = "0.8"
+tokio = { version = "1.49", features = ["full"] }
+share-ninja-core = { path = "share-ninja-core" }
+share-ninja-client = { path = "share-ninja-client" }
+
+# Client
+tokio-tungstenite = { version = "0.30", features = ["connect"] }
+futures-util = "0.3"
+reqwest = { version = "0.13", features = ["json"] }
+reqwest-middleware = { version = "0.5", features = ["json"] }
+ratatui = "0.30.2"
+crossterm = { version = "0.29.0", features = ["event-stream"] }
+
+# Generated API crates
+share-ninja-proto = { path = "generated/proto" }
+
+# Vendored with a one-line fix: the Windows interface enumeration read in6_addr
+# as native-endian u16 words, byte-swapping every IPv6 segment (fe80:: became
+# 80fe:: — link-local escaped the ICE filter and every enumerated v6 address
+# failed to bind). See vendor/rtc-shared/src/ifaces/ffi/windows/mod.rs.
+[patch.crates-io]
+rtc-shared = { path = "vendor/rtc-shared" }
+# Vendored with a one-condition fix: `create_data_channel` dialed as soon as
+# an SCTP association *existed* (from the peer's INIT), not once it was
+# *established* — a channel created in that few-ms window had its DCEP open
+# refused, and the connected procedure skips a channel that is already dialed,
+# so the peer never learned of it. See vendor/rtc/src/peer_connection/mod.rs.
+rtc = { path = "vendor/rtc" }
+# Vendored with three fixes:
+# - the UDP GSO batch cap counted the IP packet limit (65535) as the payload
+#   limit — a full 52-datagram batch overshot the kernel's 65507 by 13 bytes
+#   and was dropped with EMSGSIZE on Linux/Android, every burst and every T3
+#   retransmission burst. See `MAX_GSO_BATCH_BYTES` in
+#   vendor/webrtc/src/peer_connection/transport/mod.rs.
+# - the driver flushes writes after every received datagram, not once per
+#   64-datagram / GRO burst: one SACK per burst made a browser sender (dcSCTP)
+#   answer with bursts the WiFi AP tail-dropped — 5 MB/s instead of 17. See
+#   `deliver_udp_batch` in vendor/webrtc/src/peer_connection/driver.rs.
+# - every bound UDP socket asks for a 1 MiB receive buffer (the Android
+#   default overflows under a LAN burst). See vendor/webrtc/src/runtime/tokio.rs.
+webrtc = { path = "vendor/webrtc" }
+# Vendored rtc-sctp 0.21.0 with four log-level changes in association/mod.rs:
+# the three per-packet `debug!` lines (`recving N bytes`, `DATA: tsn=`,
+# `sending SACK`) lowered to trace and `packetloss: <gap blocks>` raised to
+# debug, so `rtc_sctp=debug` at runtime shows receiver-side TSN gaps and the
+# close-time association stats without logging every packet.
+# And the RFC 6525 stream reset rework (association/mod.rs, association/stream.rs,
+# queue/pending_queue.rs): upstream killed the association when a peer closed
+# a data channel mid-stream. A stream reset by the peer drops its not-yet-started
+# pending messages before our own reset goes, one reset request is in flight at
+# a time and is repeated on "In progress", data for a stream id under reset is
+# held until the answer, a stream closed for reading discards late DATA.
+rtc-sctp = { path = "vendor/rtc-sctp" }
+# Vendored to bump its ratatui (0.29 -> 0.30) and crossterm (0.28 -> 0.29)
+# to the workspace versions - upstream 0.7.0 pins the older pair, and a
+# second ratatui in the graph means an incompatible Widget trait.
+tui-textarea = { path = "vendor/tui-textarea" }

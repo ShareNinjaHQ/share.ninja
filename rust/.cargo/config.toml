@@ -1,0 +1,33 @@
+# Use the LLD linker (bundled with the Rust toolchain as `rust-lld`) for
+# Windows MSVC builds. LLD links significantly faster than the default
+# link.exe, speeding up incremental dev builds. Scoped to the MSVC host target
+# only, so cross-compiles (Android/iOS) are unaffected. rustc locates
+# `rust-lld.exe` in its self-contained bin dir and invokes it with
+# `-flavor link` automatically.
+#
+# Found via cargo's upward config search when building from this `rust/`
+# workspace. The desktop app has its own copy under apps/desktop/src-tauri.
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"
+
+# Enable the ARMv8 Crypto Extensions backends on Apple Silicon — same block as
+# apps/desktop/.cargo/config.toml (see the full rationale there): each
+# RustCrypto crate gates its own intrinsics (aes_armv8 -> `aes` 0.8,
+# polyval_armv8 -> `polyval` 0.6 / AES-GCM tags), and without both cfgs the
+# encrypt loops fall back to the software paths. Runtime-detected, safe on all
+# aarch64 macs. Needed here so binaries built from this workspace directly
+# (sninja CLI, brew/ packaging) get hardware crypto like the shells do.
+[target.aarch64-apple-darwin]
+rustflags = ["--cfg", "aes_armv8", "--cfg", "polyval_armv8"]
+
+# ts-rs binding export location. Without this, `#[ts(export_to = "bindings/")]`
+# writes to ts-rs' default (`share-ninja-app/bindings/bindings/`) whenever
+# someone runs `cargo test` directly — stray, un-ignored, breaks ESLint.
+# Pointing TS_RS_EXPORT_DIR at the desktop app's src makes the canonical
+# location the default, so there is no "wrong" location to land in.
+#
+# `relative = true` resolves against this file's parent-of-.cargo (the `rust/`
+# dir). No `force`, so `npm run gen:bindings` (which sets the same var
+# explicitly in the env) still takes precedence — both resolve to the same dir.
+[env]
+TS_RS_EXPORT_DIR = { value = "../apps/desktop/src", relative = true }

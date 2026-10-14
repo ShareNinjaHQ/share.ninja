@@ -1,0 +1,3 @@
+rust/target/
+rust/vendor/*/target/
+rust/generated/*/target/
